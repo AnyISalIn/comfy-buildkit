@@ -1,5 +1,5 @@
 [project]
-name = "comfyc"
+name = "comfy_buildkit"
 version = "0.1.0"
 description = "Add your description here"
 authors = [
@@ -21,4 +21,4 @@ dev-dependencies = []
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/comfyc"]
+packages = ["src/comfy_buildkit"]

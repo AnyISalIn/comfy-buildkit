@@ -4,7 +4,7 @@ import tempfile
 import logging
 from typing import List, Tuple, Dict, Any
 
-class ComfyC:
+class ComfyBuildkit:
     def __init__(self, base_image="nvidia/cuda:12.2.0-devel-ubuntu22.04", 
                  python_version="3.11", 
                  comfyui_repo="https://github.com/comfyanonymous/ComfyUI.git", 
@@ -78,6 +78,20 @@ class ComfyC:
     def _add(self, url, dest):
         self.system_commands.append(f"ADD {url} {dest}")
 
+    def _cmd(self, command):
+        if isinstance(command, list):
+            cmd_str = ', '.join(f'"{item}"' for item in command)
+            self.system_commands.append(f"CMD [{cmd_str}]")
+        else:
+            self.system_commands.append(f'CMD ["{command}"]')
+
+    def _entrypoint(self, command):
+        if isinstance(command, list):
+            entrypoint_str = ', '.join(f'"{item}"' for item in command)
+            self.system_commands.append(f"ENTRYPOINT [{entrypoint_str}]")
+        else:
+            self.system_commands.append(f'ENTRYPOINT ["{command}"]')
+
     def _file_contents(self, content, remote_path, json_dump=False):
         temp_path = os.path.join(self.temp_dir, os.path.basename(remote_path))
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
@@ -138,7 +152,20 @@ class ComfyC:
 
     def entrypoint(self, command):
         """Set the entrypoint for the Dockerfile."""
-        self.user_commands.append(f'ENTRYPOINT ["{command}"]')
+        if isinstance(command, list):
+            entrypoint_str = ', '.join(f'"{item}"' for item in command)
+            self.user_commands.append(f"ENTRYPOINT [{entrypoint_str}]")
+        else:
+            self.user_commands.append(f'ENTRYPOINT ["{command}"]')
+        return self
+
+    def cmd(self, command):
+        """Set the default command for the Dockerfile."""
+        if isinstance(command, list):
+            cmd_str = ', '.join(f'"{item}"' for item in command)
+            self.user_commands.append(f"CMD [{cmd_str}]")
+        else:
+            self.user_commands.append(f'CMD ["{command}"]')
         return self
 
     def pip_install(self, *packages):

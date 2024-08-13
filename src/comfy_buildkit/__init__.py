@@ -5,7 +5,7 @@ import logging
 from typing import List, Tuple, Dict, Any
 
 class ComfyBuildkit:
-    def __init__(self, base_image="nvidia/cuda:12.2.0-devel-ubuntu22.04", 
+    def __init__(self, base_image="ubuntu:22.04", 
                  python_version="3.11", 
                  comfyui_repo="https://github.com/comfyanonymous/ComfyUI.git", 
                  comfyui_revision="master",
@@ -171,7 +171,7 @@ class ComfyBuildkit:
     def pip_install(self, *packages):
         """Install Python packages using pip."""
         packages_str = " ".join(packages)
-        self.user_commands.append(f"RUN pip install --no-cache-dir {packages_str}")
+        self.user_commands.append(f"RUN uv pip install --system --no-cache-dir {packages_str}")
         return self
 
     def apt_install(self, *packages):
@@ -218,6 +218,7 @@ class ComfyBuildkit:
         self.system_commands = []
         self._env(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1")
         self._run(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
+        self._run(f"pip install uv")
         
         self._install_comfyui()
         if self.custom_nodes:

@@ -17,12 +17,12 @@ def install_comfyui(comfy_repo="https://github.com/comfyanonymous/ComfyUI.git", 
     subprocess.run(['git', 'checkout', comfy_revision], check=True)
     
     print("Installing dependencies")
-    subprocess.run(['pip', 'install', 'torch==2.2.1', 'torchvision', 'torchaudio', 'xformers'], check=True)
-    subprocess.run(['pip', 'install', '-r', 'requirements.txt'], check=True)
-    subprocess.run(['pip', 'install', 'onnxruntime-gpu@https://huggingface.co/anyisalin/bookmark/resolve/main/onnxruntime_gpu-1.17.0-cp310-cp310-linux_x86_64.whl'], check=True)
+    subprocess.run(['uv', 'pip', 'install', '--system', 'torch==2.2.1', 'torchvision', 'torchaudio', 'xformers'], check=True)
+    subprocess.run(['uv', 'pip', 'install', '--system', '-r', 'requirements.txt'], check=True)
+    subprocess.run(['uv', 'pip', 'install', '--system', 'onnxruntime-gpu@https://huggingface.co/anyisalin/bookmark/resolve/main/onnxruntime_gpu-1.17.0-cp310-cp310-linux_x86_64.whl'], check=True)
     
     # clean pip cache
-    subprocess.run(['pip', 'cache', 'purge'], check=True)
+    subprocess.run(['uv', 'clean'], check=True)
     
     os.chdir('..')  # Return to the original directory
 
@@ -31,7 +31,7 @@ def install_comfyui_manager(manager_repo="https://github.com/ltdrdata/ComfyUI-Ma
     subprocess.run(['git', 'clone', manager_repo, f'{COMFYUI_DIR}/custom_nodes/ComfyUI-Manager'], check=True)
     os.chdir(f'{COMFYUI_DIR}/custom_nodes/ComfyUI-Manager')
     subprocess.run(['git', 'checkout', manager_revision], check=True)
-    subprocess.run(['pip', 'install', '-r', 'requirements.txt'], check=True)
+    subprocess.run(['uv', 'pip', 'install', '--system', '-r', 'requirements.txt'], check=True)
     
     os.chdir(COMFYUI_DIR)  # Return to the ComfyUI directory
     os.chdir('..')  # Return to the original directory
@@ -46,4 +46,5 @@ if __name__ == "__main__":
     manager_revision = config.get('manager_version', "8897b9e0f77d85dc02610784e4c357329dd04f4f")
     
     install_comfyui(comfy_repo, comfy_revision)
-    install_comfyui_manager(manager_repo, manager_revision)
+    # TODO
+    # install_comfyui_manager(manager_repo, manager_revision)

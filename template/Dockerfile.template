@@ -1,0 +1,48 @@
+# Use Nvidia CUDA base image
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
+
+# Prevents prompts from packages asking for user input during installation
+ENV DEBIAN_FRONTEND=noninteractive
+# Prefer binary wheels over source distributions for faster pip installations
+ENV PIP_PREFER_BINARY=1
+# Ensures output from python is printed immediately to the terminal without buffering
+ENV PYTHONUNBUFFERED=1 
+
+# Install Python, git and other necessary tools
+RUN apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    python-is-python3 \
+    git \
+    wget \
+    libgl1-mesa-glx \
+    ibglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    ffmpeg && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+
+# Clone ComfyUI repository
+ENV PIP_INDEX_URL=http://localhost:8081/repository/pypi-proxy/simple
+ENV PIP_EXTRA_INDEX_URL=http://localhost:8081/repository/pypi-ngc/simple
+
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+
+COPY 10-install-comfy.py /builder/10-install-comfy.py
+COPY 10-install-comfy.json /builder/10-install-comfy.json
+RUN python3 /builder/10-install-comfy.py
+
+# Change working directory to ComfyUI
+WORKDIR /comfyui
+
+COPY 20-install-nodes.py /builder/20-install-nodes.py
+COPY 20-install-nodes.json /builder/20-install-nodes.json
+RUN python3 /builder/20-install-nodes.py
+
+# Inject models.
+
+# Runpod
+RUN uv pip install --system runpod requests safetensors pybase64==1.3.2
+WORKDIR /
+RUN chmod +x /start.sh
+CMD /start.sh

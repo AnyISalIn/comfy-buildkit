@@ -1,0 +1,22 @@
+[
+  {
+    "url": "https://github.com/jags111/efficiency-nodes-comfyui",
+    "hash": "b471390b88c9ac8a87c34ad9d882a520296b6fd8"
+  },
+  {
+    "url": "https://github.com/cubiq/ComfyUI_InstantID",
+    "hash": "6d95aa6758e58dab550725e59dcefbd426c160c7"
+  },
+  {
+    "url": "https://github.com/Fannovel16/comfyui_controlnet_aux",
+    "hash": "1d7cdce8cb771fbc39a432a6338168c12a338ef4"
+  },
+  {
+    "url": "https://github.com/cubiq/ComfyUI_essentials",
+    "hash": "87ec9ae07b2b2733839d06c4560b76037d64cc0b"
+  },
+  {
+    "url": "https://github.com/WASasquatch/was-node-suite-comfyui",
+    "hash": "ee2e31a1e5fd85ad6f5c36831ffda6fea8f249c7"
+  }
+]

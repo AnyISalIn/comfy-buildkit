@@ -101,7 +101,7 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
         print_error(f"Failed to start {build_tool} container: {result.stderr}")
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('profile', type=str, required=False)
+@click.argument('profile', type=str, default='Comfile', required=False)
 @click.option('--build-tool', '-b', default="docker", type=click.Choice(['docker', 'podman', 'buildah', 'fly']), help="Build tool to use (docker, podman, buildah, or fly)")
 @click.option('--tag', '-t', default="comfyui:latest", help="Docker image tag (for local build)")
 @click.option('--port', '-p', default=8080, type=int, help="Port to run the Docker container on")
@@ -116,10 +116,6 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
 def main(ctx: click.Context, profile: str, build_tool: str, tag: str, port: int, no_cleanup: bool, fly_app_name: str,
          fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool) -> None:
     """Build ComfyUI Docker image"""
-    if not profile:
-        click.echo(ctx.get_help())
-        ctx.exit()
-
     try:
         print_command(f"Loading profile: {profile}")
         

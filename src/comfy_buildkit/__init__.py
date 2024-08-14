@@ -161,6 +161,7 @@ class ComfyBuildkit:
         self.comfyui_repo: str = comfyui_repo
         self.comfyui_revision: str = comfyui_revision
         self.temp_dir: str = tempfile.mkdtemp()
+        self._copy_template_files()  # New line to copy template files
         self.comfy_install_data: Dict[str, str] = {
             "comfy_version": comfyui_revision,
             "repo": comfyui_repo,
@@ -183,6 +184,18 @@ class ComfyBuildkit:
         except ImportError:
             raise FileNotFoundError("Could not find 'template' folder in the package")
 
+    def _copy_template_files(self):
+        """Copy all template files to the temporary directory."""
+        template_dir = self._find_template_dir()
+        for root, _, files in os.walk(template_dir):
+            for file in files:
+                src_path = os.path.join(root, file)
+                rel_path = os.path.relpath(src_path, template_dir)
+                dst_path = os.path.join(self.temp_dir, rel_path)
+                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                shutil.copy2(src_path, dst_path)
+        logging.info(f"Copied template files to {self.temp_dir}")
+
     # Atomic functions for system commands
     def _run_command(self, command: str) -> str:
         return f"RUN {command}"
@@ -195,7 +208,7 @@ class ComfyBuildkit:
         return f"COPY {sources} {dest}"
 
     def _env_command(self, **kwargs: str) -> str:
-        return " ".join(f"ENV {key}={value}" for key, value in kwargs.items())
+        return "ENV " + " ".join(f"{key}={value}" for key, value in kwargs.items())
 
     def _add_command(self, url: str, dest: str) -> str:
         return f"ADD {url} {dest}"
@@ -270,11 +283,11 @@ class ComfyBuildkit:
         """Set the default command for the Dockerfile."""
         self.user_stage.append(self._cmd_command(command))
         return self
-
+    
     def pip_install(self, *packages: str) -> 'ComfyBuildkit':
         """Install Python packages using pip."""
         packages_str = " ".join(f"'{pkg}'" for pkg in packages)
-        self.user_stage.append(self._run_command(f"pip install --system --no-cache-dir {packages_str}"))
+        self.user_stage.append(self._run_command(f"uv pip install --system --no-cache-dir {packages_str}"))
         return self
 
     def apt_install(self, *packages: str) -> 'ComfyBuildkit':
@@ -332,6 +345,7 @@ class ComfyBuildkit:
         self.system_stage.append(self._run_command(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*"))
         self.system_stage.append(self._run_command(f"pip install uv"))
         
+        # No need to copy files here, as they're already in the temp directory
         self._install_comfyui()
         if self.custom_nodes:
             self._install_custom_nodes()
@@ -343,7 +357,8 @@ class ComfyBuildkit:
     def _install_comfyui(self) -> None:
         json_content = json.dumps(self.comfy_install_data, sort_keys=True)
         json_hash = hashlib.md5(json_content.encode()).hexdigest()
-        self.system_stage.append(self._file_contents_command(self.comfy_install_data, "10-install-comfy.json", json_dump=True))
+        # No need to use _file_contents_command here
+        self.system_stage.append(self._copy_command("10-install-comfy.json", "/10-install-comfy.json"))
         self.system_stage.append(self._copy_command("10-install-comfy.py", "/10-install-comfy.py"))
         self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /10-install-comfy.py"))
 
@@ -354,7 +369,10 @@ class ComfyBuildkit:
         ]
         json_content = json.dumps(node_install_data, sort_keys=True)
         json_hash = hashlib.md5(json_content.encode()).hexdigest()
-        self.system_stage.append(self._file_contents_command(node_install_data, "20-install-nodes.json", json_dump=True))
+        # Write the JSON file to the temp directory
+        with open(os.path.join(self.temp_dir, "20-install-nodes.json"), "w") as f:
+            json.dump(node_install_data, f, indent=2)
+        self.system_stage.append(self._copy_command("20-install-nodes.json", "/20-install-nodes.json"))
         self.system_stage.append(self._copy_command("20-install-nodes.py", "/20-install-nodes.py"))
         self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /20-install-nodes.py"))
 
@@ -363,7 +381,7 @@ class ComfyBuildkit:
         download_stages = []
         
         if self.download_operations:
-            download_stages.append(self._run_command("pip install --system --no-cache-dir huggingface_hub"))
+            download_stages.append(self._run_command("uv pip install --system huggingface_hub"))
             
             for operation in self.download_operations:
                 # Generate a unique hash for this operation

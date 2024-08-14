@@ -55,6 +55,7 @@ primary_region = '{primary_region}'
     print_command("EOF")
     with open(fly_toml_path, 'w') as f:
         f.write(fly_toml_content)
+
 def run_flyctl(temp_dir: Path) -> None:
     print_command(f"cd {temp_dir}")
     print_command("flyctl deploy --build-only --remote-only --push --recreate-builder --deploy-retries 0")
@@ -67,7 +68,7 @@ def run_flyctl(temp_dir: Path) -> None:
         print_error(f"Deployment failed: {result.stderr}")
     print_command(f"cd {os.getcwd()}")
 
-def run_docker_build(temp_dir: Path, tag: str) -> None:
+def run_docker_build(temp_dir: Path, tag: str) -> bool:
     print_command(f"cd {temp_dir}")
     print_command(f"docker build --network host -t {tag} .")
     print_output("Building Docker image...")
@@ -75,23 +76,36 @@ def run_docker_build(temp_dir: Path, tag: str) -> None:
                             cwd=temp_dir)
     if result.returncode == 0:
         print_output("Docker image built successfully!")
+        return True
     else:
         print_error(f"Docker build failed: {result.stderr}")
-    print_command(f"cd {os.getcwd()}")
+        return False
+
+def run_docker_container(tag: str, port: int) -> None:
+    print_command(f"docker run -d -p {port}:8188 --gpus all {tag}")
+    print_output("Starting Docker container...")
+    result = subprocess.run(["docker", "run", "--rm", "-ti", "-p", f"{port}:8188", "--gpus", "all", tag])
+    if result.returncode == 0:
+        print_output(f"Docker container started successfully! Access ComfyUI at http://localhost:{port}")
+    else:
+        print_error(f"Failed to start Docker container: {result.stderr}")
 
 @click.command()
 @click.argument('profile', type=click.Path(exists=True))
 @click.option('--local', '-l', is_flag=True, help="Build locally using Docker")
+@click.option('--run', '-r', is_flag=True, help="Run the Docker container after building")
 @click.option('--fly', '-f', is_flag=True, help="Build using Fly.io")
 @click.option('--tag', '-t', default="comfyui:latest", help="Docker image tag (for local build)")
+@click.option('--port', '-p', default=8080, type=int, help="Port to run the Docker container on")
 @click.option('--no-cleanup', '-n', is_flag=True, help="Disable auto cleanup after build")
 @click.option('--fly-app-name', '-a', default="comfy-builder", help="Fly.io app name")
 @click.option('--fly-primary-region', '-r', default="sjc", help="Fly.io primary region")
 @click.option('--fly-memory', '-m', default="4gb", help="Fly.io VM memory")
 @click.option('--fly-cpu-kind', '-k', default="shared", help="Fly.io CPU kind")
 @click.option('--fly-cpus', '-c', default=2, type=int, help="Fly.io number of CPUs")
-def main(profile: str, local: bool, fly: bool, tag: str, no_cleanup: bool, fly_app_name: str,
-         fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int) -> None:
+@click.option('--preview', '-v', is_flag=True, help="Preview Dockerfile without building")
+def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, no_cleanup: bool, fly_app_name: str,
+         fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool) -> None:
     """Build ComfyUI Docker image"""
     try:
         print_command(f"Loading profile: {profile}")
@@ -117,26 +131,30 @@ def main(profile: str, local: bool, fly: bool, tag: str, no_cleanup: bool, fly_a
         
         builder.save_dockerfile()
     
-        if local:
+        if preview:
+            print_comment("Previewing Dockerfile")
+            print_output(dockerfile_content)
+        elif local:
             print_comment("Building Docker Image")
-            run_docker_build(Path(builder.temp_dir), tag)
-    
-        if fly:
+            build_success = run_docker_build(Path(builder.temp_dir), tag)
+            if build_success and run:
+                print_comment("Running Docker Container")
+                run_docker_container(tag, port)
+        elif fly:
             print_comment("Preparing Fly.io Deployment")
             create_fly_toml(Path(builder.temp_dir), fly_app_name, fly_primary_region, fly_memory, fly_cpu_kind, fly_cpus)
             run_flyctl(Path(builder.temp_dir))
-    
-        if not (local or fly):
-            print_error("No build option specified. Use --local (-l) for Docker build or --fly (-f) for Fly.io build.")
+        else:
+            print_error("No build option specified. Use --local (-l) for Docker build, --fly (-f) for Fly.io build, or --preview (-v) to preview the Dockerfile.")
 
     except Exception as e:
         print_error(f"An error occurred: {str(e)}")
 
     finally:
-        if not no_cleanup:
+        if not no_cleanup and not preview:
             print_comment("Cleaning up...")
             builder.cleanup()
-        else:
+        elif not preview:
             print_error(f"Skipping cleanup. Temporary files remain in: {builder.temp_dir}")
 
 if __name__ == "__main__":

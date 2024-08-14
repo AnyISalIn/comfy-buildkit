@@ -257,7 +257,10 @@ class ComfyBuildkit:
             source_path = os.path.join(self.project_root, source)
             if os.path.exists(source_path):
                 import shutil
-                shutil.copy2(source_path, os.path.join(self.temp_dir, os.path.basename(source)))
+                rel_path = os.path.relpath(source_path, self.project_root)
+                dest_path = os.path.join(self.temp_dir, rel_path)
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                shutil.copy2(source_path, dest_path)
             else:
                 raise FileNotFoundError(f"Source file not found: {source}")
         

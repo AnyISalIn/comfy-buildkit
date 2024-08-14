@@ -101,7 +101,7 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
         print_error(f"Failed to start {build_tool} container: {result.stderr}")
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('profile', type=str, default='Comfile', required=False)
+@click.argument('profile', type=str, default='Comfile.py', required=False)
 @click.option('--build-tool', '-b', default="docker", type=click.Choice(['docker', 'podman', 'buildah', 'fly']), help="Build tool to use (docker, podman, buildah, or fly)")
 @click.option('--tag', '-t', default="comfyui:latest", help="Docker image tag (for local build)")
 @click.option('--port', '-p', default=8080, type=int, help="Port to run the Docker container on")

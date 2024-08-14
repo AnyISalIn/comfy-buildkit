@@ -131,6 +131,12 @@ def main(ctx: click.Context, profile: str, build_tool: str, tag: str, port: int,
         else:
             # Handle local file profile
             profile_path = Path(profile).resolve()
+            if not profile_path.suffix == '.py':
+                print_comment("Creating temporary .py file")
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+                    with open(profile_path, 'r') as original_file:
+                        temp_file.write(original_file.read())
+                    profile_path = Path(temp_file.name)
         
         print_command(f"cd {profile_path.parent}")
         os.chdir(profile_path.parent)

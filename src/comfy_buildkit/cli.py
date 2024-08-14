@@ -59,18 +59,6 @@ primary_region = '{primary_region}'
     with open(fly_toml_path, 'w') as f:
         f.write(fly_toml_content)
 
-def run_flyctl(temp_dir: Path) -> None:
-    print_command(f"cd {temp_dir}")
-    print_command("flyctl deploy --build-only --remote-only --push --recreate-builder --deploy-retries 0")
-    print_output("Deploying app...")
-    result = subprocess.run(["flyctl", "deploy", "--build-only", "--remote-only", "--push", "--recreate-builder", "--deploy-retries", "0"], 
-                            cwd=temp_dir)
-    if result.returncode == 0:
-        print_output("App deployed successfully!")
-    else:
-        print_error(f"Deployment failed: {result.stderr}")
-    print_command(f"cd {os.getcwd()}")
-
 def get_build_command(build_tool: str) -> list:
     if build_tool == "docker":
         return ["docker", "build"]
@@ -78,18 +66,25 @@ def get_build_command(build_tool: str) -> list:
         return ["podman", "build"]
     elif build_tool == "buildah":
         return ["buildah", "bud"]
+    elif build_tool == "fly":
+        return ["flyctl", "deploy", "--build-only", "--remote-only", "--push", "--recreate-builder", "--deploy-retries", "0"]
     else:
         raise ValueError(f"Unsupported build tool: {build_tool}")
 
-def run_docker_build(temp_dir: Path, tag: str, build_tool: str = "docker") -> bool:
+def run_build(temp_dir: Path, tag: str, build_tool: str) -> bool:
     print_command(f"cd {temp_dir}")
     build_cmd = get_build_command(build_tool)
-    cmd = [*build_cmd, "--network", "host", "-t", tag, "."]
+    
+    if build_tool == "fly":
+        cmd = build_cmd
+    else:
+        cmd = [*build_cmd, "--network", "host", "-t", tag, "."]
+    
     print_command(f"{' '.join(cmd)}")
     print_output(f"Building image using {build_tool}...")
     result = subprocess.run(cmd, cwd=temp_dir)
     if result.returncode == 0:
-        print_output(f"{build_tool.capitalize()} image built successfully!")
+        print_output(f"{build_tool.capitalize()} build completed successfully!")
         return True
     else:
         print_error(f"{build_tool.capitalize()} build failed: {result.stderr}")
@@ -105,11 +100,9 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
     else:
         print_error(f"Failed to start {build_tool} container: {result.stderr}")
 
-@click.command()
-@click.argument('profile', type=str)
-@click.option('--local', '-l', is_flag=True, help="Build locally using Docker")
-@click.option('--run', '-r', is_flag=True, help="Run the Docker container after building")
-@click.option('--fly', '-f', is_flag=True, help="Build using Fly.io")
+@click.command(context_settings=dict(help_option_names=['-h', '--help']))
+@click.argument('profile', type=str, required=False)
+@click.option('--build-tool', '-b', default="docker", type=click.Choice(['docker', 'podman', 'buildah', 'fly']), help="Build tool to use (docker, podman, buildah, or fly)")
 @click.option('--tag', '-t', default="comfyui:latest", help="Docker image tag (for local build)")
 @click.option('--port', '-p', default=8080, type=int, help="Port to run the Docker container on")
 @click.option('--no-cleanup', '-n', is_flag=True, help="Disable auto cleanup after build")
@@ -119,10 +112,14 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
 @click.option('--fly-cpu-kind', '-k', default="shared", help="Fly.io CPU kind")
 @click.option('--fly-cpus', '-c', default=2, type=int, help="Fly.io number of CPUs")
 @click.option('--preview', '-v', is_flag=True, help="Preview Dockerfile without building")
-@click.option('--build-tool', '-b', default="docker", type=click.Choice(['docker', 'podman', 'buildah']), help="Build tool to use (docker, podman, or buildah)")
-def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, no_cleanup: bool, fly_app_name: str,
-         fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool, build_tool: str) -> None:
+@click.pass_context
+def main(ctx: click.Context, profile: str, build_tool: str, tag: str, port: int, no_cleanup: bool, fly_app_name: str,
+         fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool) -> None:
     """Build ComfyUI Docker image"""
+    if not profile:
+        click.echo(ctx.get_help())
+        ctx.exit()
+
     try:
         print_command(f"Loading profile: {profile}")
         
@@ -163,18 +160,23 @@ def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, n
         if preview:
             print_comment("Previewing Dockerfile")
             print_output(dockerfile_content)
-        elif local:
+        else:
+            if build_tool == "fly":
+                print_comment("Preparing Fly.io Deployment")
+                create_fly_toml(Path(builder.temp_dir), fly_app_name, fly_primary_region, fly_memory, fly_cpu_kind, fly_cpus)
+            
             print_comment(f"Building Image using {build_tool}")
-            build_success = run_docker_build(Path(builder.temp_dir), tag, build_tool)
-            if build_success and run:
+            build_success = run_build(Path(builder.temp_dir), tag, build_tool)
+            
+            if build_success and build_tool in ["docker", "podman", "buildah"]:
                 print_comment(f"Running {build_tool.capitalize()} Container")
                 run_docker_container(tag, port, build_tool)
-        elif fly:
-            print_comment("Preparing Fly.io Deployment")
-            create_fly_toml(Path(builder.temp_dir), fly_app_name, fly_primary_region, fly_memory, fly_cpu_kind, fly_cpus)
-            run_flyctl(Path(builder.temp_dir))
-        else:
-            print_error(f"No build option specified. Use --local (-l) for {build_tool} build, --fly (-f) for Fly.io build, or --preview (-v) to preview the Dockerfile.")
+            elif build_tool == "fly":
+                print_comment("Preparing Fly.io Deployment")
+                create_fly_toml(Path(builder.temp_dir), fly_app_name, fly_primary_region, fly_memory, fly_cpu_kind, fly_cpus)
+                run_flyctl(Path(builder.temp_dir))
+            else:
+                print_error(f"No build option specified. Use --local (-l) for {build_tool} build, --fly (-f) for Fly.io build, or --preview (-v) to preview the Dockerfile.")
 
     except requests.RequestException as e:
         print_error(f"Failed to download profile: {str(e)}")

@@ -183,76 +183,53 @@ class ComfyBuildkit:
         except ImportError:
             raise FileNotFoundError("Could not find 'template' folder in the package")
 
-    # Internal methods for system commands
-    def _run(self, command: str) -> None:
-        self.system_stage.append(f"RUN {command}")
+    # Atomic functions for system commands
+    def _run_command(self, command: str) -> str:
+        return f"RUN {command}"
 
-    def _copy(self, *args: str) -> None:
+    def _copy_command(self, *args: str) -> str:
         if len(args) < 2:
             raise ValueError("COPY requires at least one source and one destination")
-        
-        sources: Tuple[str, ...] = args[:-1]
-        dest: str = args[-1]
-        
-        for source in sources:
-            temp_path = os.path.join(self.temp_dir, source)
-            os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-            
-            try:
-                # Try to get the file from the package resources
-                template_path = pkg_resources.files('comfy_buildkit').joinpath('template', source)
-                if template_path.is_file():
-                    shutil.copy2(str(template_path), temp_path)
-                else:
-                    raise FileNotFoundError(f"Source file not found in template: {source}")
-            except ImportError:
-                # If pkg_resources.files() is not available, fall back to the old method
-                template_dir = self._find_template_dir()
-                template_path = os.path.join(template_dir, source)
-                if os.path.exists(template_path):
-                    shutil.copy2(template_path, temp_path)
-                else:
-                    raise FileNotFoundError(f"Source file not found in template: {source}")
-        
-        self.system_stage.append(f"COPY {' '.join(sources)} {dest}")
+        sources = " ".join(args[:-1])
+        dest = args[-1]
+        return f"COPY {sources} {dest}"
 
-    def _env(self, **kwargs: str) -> None:
-        for key, value in kwargs.items():
-            self.system_stage.append(f"ENV {key}={value}")
+    def _env_command(self, **kwargs: str) -> str:
+        return " ".join(f"ENV {key}={value}" for key, value in kwargs.items())
 
-    def _add(self, url: str, dest: str) -> None:
-        self.system_stage.append(f"ADD {url} {dest}")
+    def _add_command(self, url: str, dest: str) -> str:
+        return f"ADD {url} {dest}"
 
-    def _cmd(self, command: Union[str, List[str]]) -> None:
+    def _cmd_command(self, command: Union[str, List[str]]) -> str:
         if isinstance(command, list):
-            cmd_str: str = ', '.join(f'"{item}"' for item in command)
-            self.system_stage.append(f"CMD [{cmd_str}]")
+            cmd_str = ', '.join(f'"{item}"' for item in command)
+            return f"CMD [{cmd_str}]"
         else:
-            cmd_list: List[str] = split(command)
-            cmd_str: str = ', '.join(f'"{item}"' for item in cmd_list)
-            self.system_stage.append(f"CMD [{cmd_str}]")
+            cmd_list = split(command)
+            cmd_str = ', '.join(f'"{item}"' for item in cmd_list)
+            return f"CMD [{cmd_str}]"
 
-    def _entrypoint(self, command: Union[str, List[str]]) -> None:
+    def _entrypoint_command(self, command: Union[str, List[str]]) -> str:
         if isinstance(command, list):
-            entrypoint_str: str = ', '.join(f'"{item}"' for item in command)
-            self.system_stage.append(f"ENTRYPOINT [{entrypoint_str}]")
+            entrypoint_str = ', '.join(f'"{item}"' for item in command)
+            return f"ENTRYPOINT [{entrypoint_str}]"
         else:
-            self.system_stage.append(f'ENTRYPOINT ["{command}"]')
+            return f'ENTRYPOINT ["{command}"]'
 
-    def _file_contents(self, content: Union[str, Dict[str, Any]], remote_path: str, json_dump: bool = False) -> None:
-        temp_path: str = os.path.join(self.temp_dir, remote_path.lstrip('/'))
+    def _file_contents_command(self, content: Union[str, Dict[str, Any]], remote_path: str, json_dump: bool = False) -> str:
+        temp_path = os.path.join(self.temp_dir, remote_path.lstrip('/'))
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
         with open(temp_path, "w") as f:
             if json_dump:
                 json.dump(content, f, indent=2)
             else:
                 f.write(content)
-        self._copy(remote_path, remote_path)
+        return self._copy_command(remote_path, remote_path)
 
     # Existing methods for user commands (unchanged)
     def run(self, command: str) -> 'ComfyBuildkit':
         """Add a RUN command to the Dockerfile."""
-        self.user_stage.append(f"RUN {command}")
+        self.user_stage.append(self._run_command(command))
         return self
 
     def copy(self, *args: str) -> 'ComfyBuildkit':
@@ -271,14 +248,12 @@ class ComfyBuildkit:
             else:
                 raise FileNotFoundError(f"Source file not found: {source}")
         
-        sources_str: str = " ".join(os.path.basename(s) for s in sources)
-        self.user_stage.append(f"COPY {sources_str} {dest}")
+        self.user_stage.append(self._copy_command(*args))
         return self
 
     def env(self, **kwargs: str) -> 'ComfyBuildkit':
         """Set environment variables in the Dockerfile."""
-        for key, value in kwargs.items():
-            self.user_stage.append(f"ENV {key}={value}")
+        self.user_stage.append(self._env_command(**kwargs))
         return self
 
     def workdir(self, path: str) -> 'ComfyBuildkit':
@@ -288,52 +263,37 @@ class ComfyBuildkit:
 
     def entrypoint(self, command: Union[str, List[str]]) -> 'ComfyBuildkit':
         """Set the entrypoint for the Dockerfile."""
-        if isinstance(command, list):
-            entrypoint_str: str = ', '.join(f'"{item}"' for item in command)
-            self.user_stage.append(f"ENTRYPOINT [{entrypoint_str}]")
-        else:
-            self.user_stage.append(f'ENTRYPOINT ["{command}"]')
+        self.user_stage.append(self._entrypoint_command(command))
         return self
 
     def cmd(self, command: Union[str, List[str]]) -> 'ComfyBuildkit':
         """Set the default command for the Dockerfile."""
-        if isinstance(command, list):
-            cmd_str: str = ', '.join(f'"{item}"' for item in command)
-            self.user_stage.append(f"CMD [{cmd_str}]")
-        else:
-            self.user_stage.append(f'CMD ["{command}"]')
+        self.user_stage.append(self._cmd_command(command))
         return self
 
     def pip_install(self, *packages: str) -> 'ComfyBuildkit':
         """Install Python packages using pip."""
-        packages_str: str = " ".join(f"'{pkg}'" for pkg in packages)
-        self.user_stage.append(f"RUN uv pip install --system --no-cache-dir {packages_str}")
+        packages_str = " ".join(f"'{pkg}'" for pkg in packages)
+        self.user_stage.append(self._run_command(f"pip install --system --no-cache-dir {packages_str}"))
         return self
 
     def apt_install(self, *packages: str) -> 'ComfyBuildkit':
         """Install system packages using apt-get."""
-        packages_str: str = " ".join(packages)
-        self.user_stage.append(f"RUN apt-get update && apt-get install -y {packages_str} && apt-get clean && rm -rf /var/lib/apt/lists/*")
+        packages_str = " ".join(packages)
+        self.user_stage.append(self._run_command(f"apt-get update && apt-get install -y {packages_str} && apt-get clean && rm -rf /var/lib/apt/lists/*"))
         return self
 
     def copy_local_file(self, local_path: str, remote_path: str) -> 'ComfyBuildkit':
         """Copy a local file to the Docker context and add a COPY instruction."""
-        temp_path: str = os.path.join(self.temp_dir, remote_path.lstrip('/'))
+        temp_path = os.path.join(self.temp_dir, remote_path.lstrip('/'))
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
         shutil.copy2(local_path, temp_path)
-        self.user_stage.append(f"COPY {remote_path} {remote_path}")
+        self.user_stage.append(self._copy_command(remote_path, remote_path))
         return self
 
     def file_contents(self, content: Union[str, Dict[str, Any]], remote_path: str, json_dump: bool = False) -> 'ComfyBuildkit':
         """Create a file with given contents in the Docker context and add a COPY instruction."""
-        temp_path: str = os.path.join(self.temp_dir, remote_path.lstrip('/'))
-        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-        with open(temp_path, "w") as f:
-            if json_dump:
-                json.dump(content, f, indent=2)
-            else:
-                f.write(content)
-        self.user_stage.append(f"COPY {remote_path} {remote_path}")
+        self.user_stage.append(self._file_contents_command(content, remote_path, json_dump))
         return self
     
     def custom_node_from_depends(self, depends_data: Union[str, Dict[str, Any]]) -> 'ComfyBuildkit':
@@ -362,48 +322,48 @@ class ComfyBuildkit:
 
     def add(self, url: str, dest: str) -> 'ComfyBuildkit':
         """Add an ADD command to download a file to the specified directory or file."""
-        self.user_stage.append(f"ADD {url} {dest}")
+        self.user_stage.append(self._add_command(url, dest))
         return self
 
     def generate_base_dockerfile(self) -> str:
         """Generate the base Dockerfile with system-level installations."""
         self.system_stage = [f"FROM {self.base_image} AS system_stage"]
-        self._env(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1")
-        self._run(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
-        self._run(f"pip install uv")
+        self.system_stage.append(self._env_command(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1"))
+        self.system_stage.append(self._run_command(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*"))
+        self.system_stage.append(self._run_command(f"pip install uv"))
         
         self._install_comfyui()
         if self.custom_nodes:
             self._install_custom_nodes()
         
-        self._cmd("python /comfyui/main.py --listen 0.0.0.0")
+        self.system_stage.append(self._cmd_command("python /comfyui/main.py --listen 0.0.0.0"))
         
         return "\n\n".join(self.system_stage) + "\n"
 
     def _install_comfyui(self) -> None:
         json_content = json.dumps(self.comfy_install_data, sort_keys=True)
         json_hash = hashlib.md5(json_content.encode()).hexdigest()
-        self._file_contents(self.comfy_install_data, "10-install-comfy.json", json_dump=True)
-        self._copy("10-install-comfy.py", "/10-install-comfy.py")
-        self._run(f"echo '{json_hash}' && python3 /10-install-comfy.py")
+        self.system_stage.append(self._file_contents_command(self.comfy_install_data, "10-install-comfy.json", json_dump=True))
+        self.system_stage.append(self._copy_command("10-install-comfy.py", "/10-install-comfy.py"))
+        self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /10-install-comfy.py"))
 
     def _install_custom_nodes(self) -> None:
-        node_install_data: List[Dict[str, str]] = [
+        node_install_data = [
             {"url": url, "hash": revision, "repo_name": url.split('/')[-1].replace('.git', '')}
             for url, revision in self.custom_nodes
         ]
         json_content = json.dumps(node_install_data, sort_keys=True)
         json_hash = hashlib.md5(json_content.encode()).hexdigest()
-        self._file_contents(node_install_data, "20-install-nodes.json", json_dump=True)
-        self._copy("20-install-nodes.py", "/20-install-nodes.py")
-        self._run(f"echo '{json_hash}' && python3 /20-install-nodes.py")
+        self.system_stage.append(self._file_contents_command(node_install_data, "20-install-nodes.json", json_dump=True))
+        self.system_stage.append(self._copy_command("20-install-nodes.py", "/20-install-nodes.py"))
+        self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /20-install-nodes.py"))
 
     def generate_download_dockerfile(self) -> str:
         """Generate the Dockerfile for the download layers."""
         download_stages = []
         
         if self.download_operations:
-            download_stages.append("RUN pip install huggingface_hub")
+            download_stages.append(self._run_command("pip install --system --no-cache-dir huggingface_hub"))
             
             for operation in self.download_operations:
                 # Generate a unique hash for this operation

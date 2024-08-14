@@ -23,7 +23,7 @@ $ pip install git+https://github.com/AnyISalIn/comfy-buildkit --upgrade
 Here's a simple example of how to use ComfyBuildkit:
 
 ```shell
-$ comfy-buildkit https://raw.githubusercontent.com/AnyISalIn/comfy-buildkit/main/examples/simple.py
+$ comfy-buildkit -l https://raw.githubusercontent.com/AnyISalIn/comfy-buildkit/main/examples/simple.py
 ```
 
 ### Profile Example

@@ -382,7 +382,7 @@ class ComfyBuildkit:
         """Generate the base Dockerfile with system-level installations."""
         self.system_stage = [f"FROM {self.base_image} AS system_stage"]
         self._env(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1")
-        self._run(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
+        self._run(f"apt-get update && apt-get install -y python{self.python_version} python{self.python_version}-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
         self._run(f"pip install uv")
         
         self._install_comfyui()
@@ -851,7 +851,7 @@ class ComfyBuildkit:
         """Generate the base Dockerfile with system-level installations."""
         self.system_stage = [f"FROM {self.base_image} AS system_stage"]
         self._env(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1")
-        self._run(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
+        self._run(f"apt-get update && apt-get install -y python{self.python_version} python{self.python_version}-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
         self._run(f"pip install uv")
         
         self._install_comfyui()

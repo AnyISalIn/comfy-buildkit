@@ -6,6 +6,8 @@ import click
 from comfy_buildkit import ComfyBuildkit
 from rich.console import Console
 import time
+import requests
+import tempfile
 
 console = Console()
 
@@ -91,7 +93,7 @@ def run_docker_container(tag: str, port: int) -> None:
         print_error(f"Failed to start Docker container: {result.stderr}")
 
 @click.command()
-@click.argument('profile', type=click.Path(exists=True))
+@click.argument('profile', type=str)
 @click.option('--local', '-l', is_flag=True, help="Build locally using Docker")
 @click.option('--run', '-r', is_flag=True, help="Run the Docker container after building")
 @click.option('--fly', '-f', is_flag=True, help="Build using Fly.io")
@@ -109,7 +111,20 @@ def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, n
     """Build ComfyUI Docker image"""
     try:
         print_command(f"Loading profile: {profile}")
-        profile_path = Path(profile).resolve()
+        
+        if profile.startswith(('http://', 'https://')):
+            # Handle HTTP profile
+            print_comment("Downloading profile from URL")
+            response = requests.get(profile)
+            response.raise_for_status()
+            
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+                temp_file.write(response.text)
+                profile_path = Path(temp_file.name)
+        else:
+            # Handle local file profile
+            profile_path = Path(profile).resolve()
+        
         print_command(f"cd {profile_path.parent}")
         os.chdir(profile_path.parent)
 
@@ -147,6 +162,8 @@ def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, n
         else:
             print_error("No build option specified. Use --local (-l) for Docker build, --fly (-f) for Fly.io build, or --preview (-v) to preview the Dockerfile.")
 
+    except requests.RequestException as e:
+        print_error(f"Failed to download profile: {str(e)}")
     except Exception as e:
         print_error(f"An error occurred: {str(e)}")
 

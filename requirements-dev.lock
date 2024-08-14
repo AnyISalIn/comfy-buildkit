@@ -9,3 +9,13 @@
 #   generate-hashes: false
 
 -e file:.
+click==8.1.7
+    # via comfy-buildkit
+markdown-it-py==3.0.0
+    # via rich
+mdurl==0.1.2
+    # via markdown-it-py
+pygments==2.18.0
+    # via rich
+rich==13.7.1
+    # via comfy-buildkit

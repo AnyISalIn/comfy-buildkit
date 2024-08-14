@@ -13,8 +13,6 @@ class ComfyBuildkit:
                  manager_revision="8897b9e0f77d85dc02610784e4c357329dd04f4f"):
         self.base_image = base_image
         self.python_version = python_version
-        self.user_commands = []
-        self.system_commands = []
         self.context_files = {}
         self.custom_nodes = []
         self.comfyui_repo = comfyui_repo
@@ -27,6 +25,9 @@ class ComfyBuildkit:
             "manager_repo": manager_repo
         }
         self.project_root = self._find_project_root()
+        self.hf_hub_installed = False
+        self.system_stage = []
+        self.user_stage = []
 
     def _find_project_root(self):
         """Find the project root directory containing the 'template' folder."""
@@ -39,7 +40,7 @@ class ComfyBuildkit:
 
     # Internal methods for system commands
     def _run(self, command):
-        self.system_commands.append(f"RUN {command}")
+        self.system_stage.append(f"RUN {command}")
 
     def _copy(self, *args):
         if len(args) < 2:
@@ -57,7 +58,7 @@ class ComfyBuildkit:
                     shutil.copy2(full_source_path, os.path.join(self.temp_dir, os.path.basename(full_source_path)))
                 else:
                     raise FileNotFoundError(f"Source file not found: {full_source_path}")
-            self.system_commands.append(f"COPY {os.path.basename(source)} {dest}")
+            self.system_stage.append(f"COPY {os.path.basename(source)} {dest}")
         else:
             # Multiple files to directory
             for source in sources:
@@ -69,28 +70,28 @@ class ComfyBuildkit:
                     else:
                         raise FileNotFoundError(f"Source file not found: {full_source_path}")
             sources_str = " ".join(os.path.basename(s) for s in sources)
-            self.system_commands.append(f"COPY {sources_str} {dest}")
+            self.system_stage.append(f"COPY {sources_str} {dest}")
 
     def _env(self, **kwargs):
         for key, value in kwargs.items():
-            self.system_commands.append(f"ENV {key}={value}")
+            self.system_stage.append(f"ENV {key}={value}")
 
     def _add(self, url, dest):
-        self.system_commands.append(f"ADD {url} {dest}")
+        self.system_stage.append(f"ADD {url} {dest}")
 
     def _cmd(self, command):
         if isinstance(command, list):
             cmd_str = ', '.join(f'"{item}"' for item in command)
-            self.system_commands.append(f"CMD [{cmd_str}]")
+            self.system_stage.append(f"CMD [{cmd_str}]")
         else:
-            self.system_commands.append(f'CMD ["{command}"]')
+            self.system_stage.append(f'CMD ["{command}"]')
 
     def _entrypoint(self, command):
         if isinstance(command, list):
             entrypoint_str = ', '.join(f'"{item}"' for item in command)
-            self.system_commands.append(f"ENTRYPOINT [{entrypoint_str}]")
+            self.system_stage.append(f"ENTRYPOINT [{entrypoint_str}]")
         else:
-            self.system_commands.append(f'ENTRYPOINT ["{command}"]')
+            self.system_stage.append(f'ENTRYPOINT ["{command}"]')
 
     def _file_contents(self, content, remote_path, json_dump=False):
         temp_path = os.path.join(self.temp_dir, os.path.basename(remote_path))
@@ -106,7 +107,7 @@ class ComfyBuildkit:
     # Existing methods for user commands (unchanged)
     def run(self, command):
         """Add a RUN command to the Dockerfile."""
-        self.user_commands.append(f"RUN {command}")
+        self.user_stage.append(f"RUN {command}")
         return self
 
     def copy(self, *args):
@@ -125,7 +126,7 @@ class ComfyBuildkit:
                     shutil.copy2(source, os.path.join(self.temp_dir, os.path.basename(source)))
                 else:
                     raise FileNotFoundError(f"Source file not found: {source}")
-            self.user_commands.append(f"COPY {os.path.basename(source)} {dest}")
+            self.user_stage.append(f"COPY {os.path.basename(source)} {dest}")
         else:
             # Multiple files to directory
             for source in sources:
@@ -136,48 +137,48 @@ class ComfyBuildkit:
                     else:
                         raise FileNotFoundError(f"Source file not found: {source}")
             sources_str = " ".join(os.path.basename(s) for s in sources)
-            self.user_commands.append(f"COPY {sources_str} {dest}")
+            self.user_stage.append(f"COPY {sources_str} {dest}")
         return self
 
     def env(self, **kwargs):
         """Set environment variables in the Dockerfile."""
         for key, value in kwargs.items():
-            self.user_commands.append(f"ENV {key}={value}")
+            self.user_stage.append(f"ENV {key}={value}")
         return self
 
     def workdir(self, path):
         """Set working directory in the Dockerfile."""
-        self.user_commands.append(f"WORKDIR {path}")
+        self.user_stage.append(f"WORKDIR {path}")
         return self
 
     def entrypoint(self, command):
         """Set the entrypoint for the Dockerfile."""
         if isinstance(command, list):
             entrypoint_str = ', '.join(f'"{item}"' for item in command)
-            self.user_commands.append(f"ENTRYPOINT [{entrypoint_str}]")
+            self.user_stage.append(f"ENTRYPOINT [{entrypoint_str}]")
         else:
-            self.user_commands.append(f'ENTRYPOINT ["{command}"]')
+            self.user_stage.append(f'ENTRYPOINT ["{command}"]')
         return self
 
     def cmd(self, command):
         """Set the default command for the Dockerfile."""
         if isinstance(command, list):
             cmd_str = ', '.join(f'"{item}"' for item in command)
-            self.user_commands.append(f"CMD [{cmd_str}]")
+            self.user_stage.append(f"CMD [{cmd_str}]")
         else:
-            self.user_commands.append(f'CMD ["{command}"]')
+            self.user_stage.append(f'CMD ["{command}"]')
         return self
 
     def pip_install(self, *packages):
         """Install Python packages using pip."""
         packages_str = " ".join(packages)
-        self.user_commands.append(f"RUN uv pip install --system --no-cache-dir {packages_str}")
+        self.user_stage.append(f"RUN uv pip install --system --no-cache-dir {packages_str}")
         return self
 
     def apt_install(self, *packages):
         """Install system packages using apt-get."""
         packages_str = " ".join(packages)
-        self.user_commands.append(f"RUN apt-get update && apt-get install -y {packages_str} && apt-get clean && rm -rf /var/lib/apt/lists/*")
+        self.user_stage.append(f"RUN apt-get update && apt-get install -y {packages_str} && apt-get clean && rm -rf /var/lib/apt/lists/*")
         return self
 
     def copy_local_file(self, local_path, remote_path):
@@ -187,7 +188,7 @@ class ComfyBuildkit:
         with open(local_path, "rb") as src, open(temp_path, "wb") as dst:
             dst.write(src.read())
         self.context_files[os.path.basename(local_path)] = temp_path
-        self.user_commands.append(f"COPY {os.path.basename(local_path)} {remote_path}")
+        self.user_stage.append(f"COPY {os.path.basename(local_path)} {remote_path}")
         return self
 
     def file_contents(self, content, remote_path, json_dump=False):
@@ -200,7 +201,7 @@ class ComfyBuildkit:
             else:
                 f.write(content)
         self.context_files[os.path.basename(remote_path)] = temp_path
-        self.user_commands.append(f"COPY {os.path.basename(remote_path)} {remote_path}")
+        self.user_stage.append(f"COPY {os.path.basename(remote_path)} {remote_path}")
         return self
 
     def custom_node(self, url, revision="main"):
@@ -210,12 +211,36 @@ class ComfyBuildkit:
 
     def add(self, url, dest):
         """Add an ADD command to download a file to the specified directory or file."""
-        self.user_commands.append(f"ADD {url} {dest}")
+        self.user_stage.append(f"ADD {url} {dest}")
+        return self
+
+    def hf_snapshot_download(self, repo_id, local_dir=None, revision=None, ignore_patterns=None, token=None):
+        """Add a Hugging Face model snapshot download to the build process."""
+        if not self.hf_hub_installed:
+            # First HF download, add huggingface_hub installation
+            self.pip_install("huggingface_hub")
+            self.hf_hub_installed = True
+        
+        download_args = f"repo_id='{repo_id}'"
+        if local_dir:
+            download_args += f", local_dir='{local_dir}'"
+        if revision:
+            download_args += f", revision='{revision}'"
+        if ignore_patterns:
+            patterns = ", ".join(f"'{pattern}'" for pattern in ignore_patterns)
+            download_args += f", ignore_patterns=[{patterns}]"
+        if token:
+            download_args += f", token='{token}'"
+        
+        download_command = f"python -c \"from huggingface_hub import snapshot_download; snapshot_download({download_args})\""
+        
+        
+        self.user_stage.append(f"RUN {download_command}")
         return self
 
     def generate_base_dockerfile(self):
         """Generate the base Dockerfile with system-level installations."""
-        self.system_commands = []
+        self.system_stage = [f"FROM {self.base_image} AS system_stage"]
         self._env(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1")
         self._run(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*")
         self._run(f"pip install uv")
@@ -224,7 +249,7 @@ class ComfyBuildkit:
         if self.custom_nodes:
             self._install_custom_nodes()
         
-        return f"FROM {self.base_image}\n\n" + "\n".join(self.system_commands) + "\n"
+        return "\n\n".join(self.system_stage) + "\n"
 
     def _install_comfyui(self):
         self._file_contents(self.comfy_install_data, "/10-install-comfy.json", json_dump=True)
@@ -242,27 +267,29 @@ class ComfyBuildkit:
 
     def generate_user_dockerfile(self):
         """Generate the Dockerfile with user commands."""
-        return "\n".join(self.user_commands) + "\n"
+        user_stage = ["FROM system_stage AS user_stage"]
+        user_stage.extend(self.user_stage)
+        return "\n\n".join(user_stage) + "\n"
 
     def generate_dockerfile(self):
-        """Generate the final Dockerfile by concatenating base and user Dockerfiles."""
+        """Generate the final Dockerfile by concatenating system and user stages."""
         return self.generate_base_dockerfile() + "\n" + self.generate_user_dockerfile()
 
     def save_dockerfile(self):
-        base_dockerfile_path = os.path.join(self.temp_dir, "Dockerfile.base")
+        system_dockerfile_path = os.path.join(self.temp_dir, "Dockerfile.system")
         user_dockerfile_path = os.path.join(self.temp_dir, "Dockerfile.user")
         final_dockerfile_path = os.path.join(self.temp_dir, "Dockerfile")
 
-        with open(base_dockerfile_path, "w") as f:
+        with open(system_dockerfile_path, "w") as f:
             f.write(self.generate_base_dockerfile())
         with open(user_dockerfile_path, "w") as f:
             f.write(self.generate_user_dockerfile())
         with open(final_dockerfile_path, "w") as f:
             f.write(self.generate_dockerfile())
 
-        logging.info(f"Base Dockerfile saved to {base_dockerfile_path}")
-        logging.info(f"User Dockerfile saved to {user_dockerfile_path}")
-        logging.info(f"Final Dockerfile saved to {final_dockerfile_path}")
+        logging.info(f"System stage Dockerfile saved to {system_dockerfile_path}")
+        logging.info(f"User stage Dockerfile saved to {user_dockerfile_path}")
+        logging.info(f"Final multi-stage Dockerfile saved to {final_dockerfile_path}")
 
         if self.context_files:
             logging.info("\nContext files to be copied:")

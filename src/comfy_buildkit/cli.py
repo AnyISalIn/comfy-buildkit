@@ -8,6 +8,7 @@ from rich.console import Console
 import time
 import requests
 import tempfile
+import shutil
 
 console = Console()
 
@@ -70,27 +71,39 @@ def run_flyctl(temp_dir: Path) -> None:
         print_error(f"Deployment failed: {result.stderr}")
     print_command(f"cd {os.getcwd()}")
 
-def run_docker_build(temp_dir: Path, tag: str) -> bool:
+def get_build_command(build_tool: str) -> list:
+    if build_tool == "docker":
+        return ["docker", "build"]
+    elif build_tool == "podman":
+        return ["podman", "build"]
+    elif build_tool == "buildah":
+        return ["buildah", "bud"]
+    else:
+        raise ValueError(f"Unsupported build tool: {build_tool}")
+
+def run_docker_build(temp_dir: Path, tag: str, build_tool: str = "docker") -> bool:
     print_command(f"cd {temp_dir}")
-    print_command(f"docker build --network host -t {tag} .")
-    print_output("Building Docker image...")
-    result = subprocess.run(["docker", "build", "--network", "host", "-t", tag, "."], 
-                            cwd=temp_dir)
+    build_cmd = get_build_command(build_tool)
+    cmd = [*build_cmd, "--network", "host", "-t", tag, "."]
+    print_command(f"{' '.join(cmd)}")
+    print_output(f"Building image using {build_tool}...")
+    result = subprocess.run(cmd, cwd=temp_dir)
     if result.returncode == 0:
-        print_output("Docker image built successfully!")
+        print_output(f"{build_tool.capitalize()} image built successfully!")
         return True
     else:
-        print_error(f"Docker build failed: {result.stderr}")
+        print_error(f"{build_tool.capitalize()} build failed: {result.stderr}")
         return False
 
-def run_docker_container(tag: str, port: int) -> None:
-    print_command(f"docker run -d -p {port}:8188 --gpus all {tag}")
-    print_output("Starting Docker container...")
-    result = subprocess.run(["docker", "run", "--rm", "-ti", "-p", f"{port}:8188", "--gpus", "all", tag])
+def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> None:
+    run_cmd = "docker" if build_tool == "docker" else build_tool
+    print_command(f"{run_cmd} run -d -p {port}:8188 --gpus all {tag}")
+    print_output(f"Starting {build_tool} container...")
+    result = subprocess.run([run_cmd, "run", "--rm", "-ti", "-p", f"{port}:8188", "--gpus", "all", tag])
     if result.returncode == 0:
-        print_output(f"Docker container started successfully! Access ComfyUI at http://localhost:{port}")
+        print_output(f"{build_tool.capitalize()} container started successfully! Access ComfyUI at http://localhost:{port}")
     else:
-        print_error(f"Failed to start Docker container: {result.stderr}")
+        print_error(f"Failed to start {build_tool} container: {result.stderr}")
 
 @click.command()
 @click.argument('profile', type=str)
@@ -106,8 +119,9 @@ def run_docker_container(tag: str, port: int) -> None:
 @click.option('--fly-cpu-kind', '-k', default="shared", help="Fly.io CPU kind")
 @click.option('--fly-cpus', '-c', default=2, type=int, help="Fly.io number of CPUs")
 @click.option('--preview', '-v', is_flag=True, help="Preview Dockerfile without building")
+@click.option('--build-tool', '-b', default="docker", type=click.Choice(['docker', 'podman', 'buildah']), help="Build tool to use (docker, podman, or buildah)")
 def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, no_cleanup: bool, fly_app_name: str,
-         fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool) -> None:
+         fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool, build_tool: str) -> None:
     """Build ComfyUI Docker image"""
     try:
         print_command(f"Loading profile: {profile}")
@@ -150,17 +164,17 @@ def main(profile: str, local: bool, run: bool, fly: bool, tag: str, port: int, n
             print_comment("Previewing Dockerfile")
             print_output(dockerfile_content)
         elif local:
-            print_comment("Building Docker Image")
-            build_success = run_docker_build(Path(builder.temp_dir), tag)
+            print_comment(f"Building Image using {build_tool}")
+            build_success = run_docker_build(Path(builder.temp_dir), tag, build_tool)
             if build_success and run:
-                print_comment("Running Docker Container")
-                run_docker_container(tag, port)
+                print_comment(f"Running {build_tool.capitalize()} Container")
+                run_docker_container(tag, port, build_tool)
         elif fly:
             print_comment("Preparing Fly.io Deployment")
             create_fly_toml(Path(builder.temp_dir), fly_app_name, fly_primary_region, fly_memory, fly_cpu_kind, fly_cpus)
             run_flyctl(Path(builder.temp_dir))
         else:
-            print_error("No build option specified. Use --local (-l) for Docker build, --fly (-f) for Fly.io build, or --preview (-v) to preview the Dockerfile.")
+            print_error(f"No build option specified. Use --local (-l) for {build_tool} build, --fly (-f) for Fly.io build, or --preview (-v) to preview the Dockerfile.")
 
     except requests.RequestException as e:
         print_error(f"Failed to download profile: {str(e)}")

@@ -216,8 +216,9 @@ class ComfyBuildkit:
         
         # Pip packages
         if 'pip_packages' in config:
-            for package in config['pip_packages']:
-                builder.pip_install(package)
+            packages = config['pip_packages']
+            if packages:
+                builder.pip_install(*packages)
         
         # Copy files
         if 'copy' in config:

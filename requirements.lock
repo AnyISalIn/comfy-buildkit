@@ -23,6 +23,8 @@ mdurl==0.1.2
     # via markdown-it-py
 pygments==2.18.0
     # via rich
+pyyaml==6.0.2
+    # via comfy-buildkit
 requests==2.32.3
     # via comfy-buildkit
 rich==13.7.1

@@ -83,7 +83,8 @@ class CivitaiDownload(DownloadOperation):
         self.model_name = model_name
         self.file_name = self._get_file_name()
         self.local_path = os.path.join(self.local_dir, self.file_name)
-
+        
+    
     def _get_file_name(self) -> str:
         if self.model_name:
             return self.model_name
@@ -174,6 +175,88 @@ class ComfyBuildkit:
         self.user_stage: List[str] = []
         self.download_operations: List[DownloadOperation] = []
         self.models = Models(self)
+
+    @classmethod
+    def from_yaml(cls, yaml_content: str) -> 'ComfyBuildkit':
+        """Configure the builder from a YAML string or file."""
+        import yaml
+        
+        try:
+            config = yaml.safe_load(yaml_content)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Invalid YAML content: {e}")
+        
+        builder = cls()
+        
+        # ComfyUI repository and revision
+        if 'comfyui' in config:
+            comfyui = config['comfyui']
+            builder.comfyui_repo = comfyui.get('repo', builder.comfyui_repo)
+            builder.comfyui_revision = comfyui.get('revision', builder.comfyui_revision)
+        
+        # Custom nodes
+        if 'custom_nodes' in config:
+            for node in config['custom_nodes']:
+                builder.custom_node(node['url'], node.get('revision', 'main'))
+        
+        # Models
+        if 'models' in config:
+            for model in config['models']:
+                if model['type'] == 'wget':
+                    builder.models.wget(model['url'], model['local_path'])
+                elif model['type'] == 'hf_file':
+                    builder.models.hf_file(model['repo_id'], model['filename'], model['local_path'], 
+                                        model.get('revision'), model.get('token'))
+                elif model['type'] == 'hf_snapshot':
+                    builder.models.hf_snapshot(model['repo_id'], model['local_dir'], 
+                                            model.get('revision'), model.get('ignore_patterns'), model.get('token'))
+                elif model['type'] == 'civitai':
+                    builder.models.civitai(model['model_id'], model['local_path'], 
+                                        model.get('token'), model.get('model_name'))
+        
+        # Pip packages
+        if 'pip_packages' in config:
+            for package in config['pip_packages']:
+                builder.pip_install(package)
+        
+        # Copy files
+        if 'copy' in config:
+            for copy_item in config['copy']:
+                builder.copy(copy_item['src'], copy_item['dest'])
+        
+        # Run commands
+        if 'run' in config:
+            for command in config['run']:
+                builder.run(command)
+        
+        # CMD
+        if 'cmd' in config:
+            builder.cmd(config['cmd'])
+        
+        # ENTRYPOINT
+        if 'entrypoint' in config:
+            builder.entrypoint(config['entrypoint'])
+        
+        # Environment variables
+        if 'env' in config:
+            for key, value in config['env'].items():
+                builder.env(**{key: value})
+        
+        # System packages (apt install)
+        if 'system_packages' in config:
+            for package in config['system_packages']:
+                builder.apt_install(package)
+        
+        # Base image
+        if 'base_image' in config:
+            builder.base_image = config['base_image']
+        
+        # Python version
+        if 'python_version' in config:
+            builder.python_version = config['python_version']
+        
+        return builder
+
 
     def _find_template_dir(self) -> str:
         """Find the directory containing the 'template' folder within the package."""

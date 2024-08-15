@@ -101,7 +101,7 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
         print_error(f"Failed to start {build_tool} container: {result.stderr}")
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('profile', type=str, default='Comfile.py', required=False)
+@click.argument('profile', type=click.Path(exists=True), default='comfyfile.yaml', required=False)
 @click.option('--build-tool', '-b', default="docker", type=click.Choice(['docker', 'podman', 'buildah', 'fly']), help="Build tool to use (docker, podman, buildah, or fly)")
 @click.option('--tag', '-t', default="comfyui:latest", help="Docker image tag (for local build)")
 @click.option('--port', '-p', default=8080, type=int, help="Port to run the Docker container on")
@@ -115,7 +115,7 @@ def run_docker_container(tag: str, port: int, build_tool: str = "docker") -> Non
 @click.pass_context
 def main(ctx: click.Context, profile: str, build_tool: str, tag: str, port: int, no_cleanup: bool, fly_app_name: str,
          fly_primary_region: str, fly_memory: str, fly_cpu_kind: str, fly_cpus: int, preview: bool) -> None:
-    """Build ComfyUI Docker image"""
+    """Build ComfyUI Docker image from YAML or Python profile"""
     try:
         print_command(f"Loading profile: {profile}")
         
@@ -125,31 +125,29 @@ def main(ctx: click.Context, profile: str, build_tool: str, tag: str, port: int,
             response = requests.get(profile)
             response.raise_for_status()
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_file:
                 temp_file.write(response.text)
                 profile_path = Path(temp_file.name)
         else:
             # Handle local file profile
             profile_path = Path(profile).resolve()
-            if not profile_path.suffix == '.py':
-                print_comment("Creating temporary .py file")
-                with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as temp_file:
-                    with open(profile_path, 'r') as original_file:
-                        temp_file.write(original_file.read())
-                    profile_path = Path(temp_file.name)
         
-        print_command(f"cd {profile_path.parent}")
-        os.chdir(profile_path.parent)
-
-        sys.path.append(str(profile_path.parent))
-        profile_module = profile_path.stem
-        module = __import__(profile_module)
-        
-        builder = next((attr for attr in vars(module).values() if isinstance(attr, ComfyBuildkit)), None)
-        
-        if not builder:
-            print_error("No ComfyBuildkit instance found in the profile module")
-            return
+        # Determine if it's a YAML or Python file
+        if profile_path.suffix.lower() in ['.yaml', '.yml']:
+            with open(profile_path, 'r') as yaml_file:
+                yaml_content = yaml_file.read()
+            builder = ComfyBuildkit.from_yaml(yaml_content)
+        elif profile_path.suffix.lower() == '.py':
+            print_command(f"cd {profile_path.parent}")
+            os.chdir(profile_path.parent)
+            sys.path.append(str(profile_path.parent))
+            profile_module = profile_path.stem
+            module = __import__(profile_module)
+            builder = next((attr for attr in vars(module).values() if isinstance(attr, ComfyBuildkit)), None)
+            if not builder:
+                raise ValueError("No ComfyBuildkit instance found in the profile module")
+        else:
+            raise ValueError("Unsupported file format. Use .yaml, .yml, or .py files.")
 
         print_comment("Generating Dockerfile")
         dockerfile_content = builder.generate_dockerfile()

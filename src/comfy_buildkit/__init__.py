@@ -424,6 +424,22 @@ class ComfyBuildkit:
         self.user_stage.append(self._add_command(url, dest))
         return self
 
+    # def generate_base_dockerfile(self) -> str:
+    #     """Generate the base Dockerfile with system-level installations."""
+    #     self.system_stage = [f"FROM {self.base_image} AS system_stage"]
+    #     self.system_stage.append(self._env_command(DEBIAN_FRONTEND="noninteractive", PIP_PREFER_BINARY="1", PYTHONUNBUFFERED="1"))
+    #     self.system_stage.append(self._run_command(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*"))
+    #     self.system_stage.append(self._run_command(f"pip install uv"))
+        
+    #     # No need to copy files here, as they're already in the temp directory
+    #     self._install_comfyui()
+    #     if self.custom_nodes:
+    #         self._install_custom_nodes()
+        
+    #     self.system_stage.append(self._cmd_command("python /comfyui/main.py --listen 0.0.0.0"))
+        
+    #     return "\n\n".join(self.system_stage) + "\n"
+
     def generate_base_dockerfile(self) -> str:
         """Generate the base Dockerfile with system-level installations."""
         self.system_stage = [f"FROM {self.base_image} AS system_stage"]
@@ -431,14 +447,39 @@ class ComfyBuildkit:
         self.system_stage.append(self._run_command(f"apt-get update && apt-get install -y python{self.python_version} python3-pip python-is-python3 wget git libgl1-mesa-glx libglib2.0-0 libsm6 libxrender1 libxext6 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*"))
         self.system_stage.append(self._run_command(f"pip install uv"))
         
-        # No need to copy files here, as they're already in the temp directory
-        self._install_comfyui()
-        if self.custom_nodes:
-            self._install_custom_nodes()
+        # Install ComfyUI and custom nodes in a single stage
+        self._install_comfyui_and_nodes()
         
         self.system_stage.append(self._cmd_command("python /comfyui/main.py --listen 0.0.0.0"))
         
         return "\n\n".join(self.system_stage) + "\n"
+
+
+    def _install_comfyui_and_nodes(self) -> None:
+        # Prepare ComfyUI installation data
+        comfy_install_data = self.comfy_install_data.copy()
+        
+        # Add custom nodes data
+        node_install_data = [
+            {"url": url, "hash": revision, "repo_name": url.split('/')[-1].replace('.git', '')}
+            for url, revision in self.custom_nodes
+        ]
+        comfy_install_data["custom_nodes"] = node_install_data
+
+        # Create a combined JSON file
+        json_content = json.dumps(comfy_install_data, sort_keys=True)
+        json_hash = hashlib.md5(json_content.encode()).hexdigest()
+
+        # Write the combined JSON file to the temp directory
+        with open(os.path.join(self.temp_dir, "install-comfy-and-nodes.json"), "w") as f:
+            json.dump(comfy_install_data, f, indent=2)
+
+        # Copy the combined installation script and JSON file
+        self.system_stage.append(self._copy_command("install-comfy-and-nodes.json", "/install-comfy-and-nodes.json"))
+        self.system_stage.append(self._copy_command("install-comfy-and-nodes.py", "/install-comfy-and-nodes.py"))
+        
+        # Run the combined installation script
+        self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /install-comfy-and-nodes.py"))
 
     def _install_comfyui(self) -> None:
         json_content = json.dumps(self.comfy_install_data, sort_keys=True)
@@ -448,19 +489,19 @@ class ComfyBuildkit:
         self.system_stage.append(self._copy_command("10-install-comfy.py", "/10-install-comfy.py"))
         self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /10-install-comfy.py"))
 
-    def _install_custom_nodes(self) -> None:
-        node_install_data = [
-            {"url": url, "hash": revision, "repo_name": url.split('/')[-1].replace('.git', '')}
-            for url, revision in self.custom_nodes
-        ]
-        json_content = json.dumps(node_install_data, sort_keys=True)
-        json_hash = hashlib.md5(json_content.encode()).hexdigest()
-        # Write the JSON file to the temp directory
-        with open(os.path.join(self.temp_dir, "20-install-nodes.json"), "w") as f:
-            json.dump(node_install_data, f, indent=2)
-        self.system_stage.append(self._copy_command("20-install-nodes.json", "/20-install-nodes.json"))
-        self.system_stage.append(self._copy_command("20-install-nodes.py", "/20-install-nodes.py"))
-        self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /20-install-nodes.py"))
+    # def _install_custom_nodes(self) -> None:
+    #     node_install_data = [
+    #         {"url": url, "hash": revision, "repo_name": url.split('/')[-1].replace('.git', '')}
+    #         for url, revision in self.custom_nodes
+    #     ]
+    #     json_content = json.dumps(node_install_data, sort_keys=True)
+    #     json_hash = hashlib.md5(json_content.encode()).hexdigest()
+    #     # Write the JSON file to the temp directory
+    #     with open(os.path.join(self.temp_dir, "20-install-nodes.json"), "w") as f:
+    #         json.dump(node_install_data, f, indent=2)
+    #     self.system_stage.append(self._copy_command("20-install-nodes.json", "/20-install-nodes.json"))
+    #     self.system_stage.append(self._copy_command("20-install-nodes.py", "/20-install-nodes.py"))
+    #     self.system_stage.append(self._run_command(f"echo '{json_hash}' && python3 /20-install-nodes.py"))
 
     def generate_download_dockerfile(self) -> str:
         """Generate the Dockerfile for the download layers."""

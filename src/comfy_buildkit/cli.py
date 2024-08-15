@@ -59,6 +59,18 @@ primary_region = '{primary_region}'
     with open(fly_toml_path, 'w') as f:
         f.write(fly_toml_content)
 
+def run_flyctl(temp_dir: Path) -> None:
+    print_command(f"cd {temp_dir}")
+    print_command("flyctl deploy --build-only --remote-only --push --recreate-builder --deploy-retries 0")
+    print_output("Deploying app...")
+    result = subprocess.run(["flyctl", "deploy", "--build-only", "--remote-only", "--push", "--recreate-builder", "--deploy-retries", "0"], 
+                            cwd=temp_dir)
+    if result.returncode == 0:
+        print_output("App deployed successfully!")
+    else:
+        print_error(f"Deployment failed: {result.stderr}")
+    print_command(f"cd {os.getcwd()}")
+
 def get_build_command(build_tool: str) -> list:
     if build_tool == "docker":
         return ["docker", "build"]

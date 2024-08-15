@@ -23,7 +23,7 @@ $ pip install git+https://github.com/AnyISalIn/comfy-buildkit --upgrade
 Here's a simple example of how to use ComfyBuildkit:
 
 ```shell
-$ comfy-buildkit -l https://raw.githubusercontent.com/AnyISalIn/comfy-buildkit/main/examples/simple.py
+$ comfy-buildkit https://raw.githubusercontent.com/AnyISalIn/comfy-buildkit/main/examples/simple.py
 ```
 
 ### YAML Example
@@ -34,7 +34,7 @@ Here's an example of a `comfyfile.yaml`:
 After creating a `comfyfile.yaml`, you can build the image using the following command:
 
 ```shell
-$ comfy-buildkit -l comfyfile.yaml
+$ comfy-buildkit comfyfile.yaml
 ```
 
 ```yaml

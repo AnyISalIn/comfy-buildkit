@@ -44,7 +44,7 @@ class HFFileDownload(DownloadOperation):
 class HFSnapshotDownload(DownloadOperation):
     def __init__(self, repo_id: str, local_dir: str, revision: Optional[str] = None, ignore_patterns: Optional[List[str]] = None, token: Optional[str] = None):
         self.repo_id = repo_id
-        self.local_dir = os.path.join('/comfy/models', local_dir) if not local_dir.startswith('/') else local_dir
+        self.local_dir = os.path.join('/comfyui/models', local_dir) if not local_dir.startswith('/') else local_dir
         self.revision = revision
         self.ignore_patterns = ignore_patterns
         self.token = token
@@ -67,7 +67,7 @@ class HFSnapshotDownload(DownloadOperation):
 class URLDownload(DownloadOperation):
     def __init__(self, url: str, local_path: str):
         self.url = url
-        self.local_path = os.path.join('/comfy/models', local_path) if not local_path.startswith('/') else local_path
+        self.local_path = os.path.join('/comfyui/models', local_path) if not local_path.startswith('/') else local_path
 
     def get_dockerfile_commands(self) -> List[str]:
         return [f"ADD {self.url} {self.local_path}"]

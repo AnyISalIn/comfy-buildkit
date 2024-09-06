@@ -161,20 +161,27 @@ class ComfyBuildkit:
         self.custom_nodes: List[Tuple[str, str]] = []
         self.comfyui_repo: str = comfyui_repo
         self.comfyui_revision: str = comfyui_revision
+        self.manager_repo: str = manager_repo
+        self.manager_revision: str = manager_revision
+
         self.temp_dir: str = tempfile.mkdtemp()
         self._copy_template_files()  # New line to copy template files
-        self.comfy_install_data: Dict[str, str] = {
-            "comfy_version": comfyui_revision,
-            "repo": comfyui_repo,
-            "manager_version": manager_revision,
-            "manager_repo": manager_repo
-        }
         self.project_root: str = os.getcwd()  # Current working directory
         self.hf_hub_installed: bool = False
         self.system_stage: List[str] = []
         self.user_stage: List[str] = []
         self.download_operations: List[DownloadOperation] = []
         self.models = Models(self)
+    
+    @property
+    def comfy_install_data(self) -> Dict[str, str]:
+        return {
+            "comfy_version": self.comfyui_revision,
+            "repo": self.comfyui_repo,
+            "manager_version": self.manager_revision,
+            "manager_repo": self.manager_repo
+        }
+
 
     @classmethod
     def from_yaml(cls, yaml_content: str) -> 'ComfyBuildkit':

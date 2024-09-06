@@ -530,8 +530,7 @@ class ComfyBuildkit:
         stages = [
             self.generate_base_dockerfile(),
             self.generate_download_dockerfile(),
-            "FROM system_stage AS user_stage\n" + self.generate_user_dockerfile(),
-            "FROM user_stage AS final_stage\n"
+            "FROM system_stage AS download_stage\n"
         ]
 
         for operation in self.download_operations:
@@ -539,6 +538,11 @@ class ComfyBuildkit:
             stage_name = f"download_{operation_hash}"
             output_path = operation.get_output_path()
             stages[-1] += f"COPY --from={stage_name} {output_path} {output_path}\n"
+
+        stages.extend([
+            "FROM download_stage AS user_stage\n" + self.generate_user_dockerfile(),
+            "FROM user_stage AS final_stage\n"
+        ])
 
         return "\n".join(stages)
 

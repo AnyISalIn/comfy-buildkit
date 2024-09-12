@@ -89,6 +89,10 @@ def run_build(temp_dir: Path, tag: str, build_tool: str) -> bool:
     
     if build_tool == "fly":
         cmd = build_cmd
+    elif build_tool == "docker":
+        cmd = [*build_cmd, "--network", "host", "-t", tag, 
+               "--output=type=image,compression=zstd,compression-level=3,force-compression=true,push=true",
+               "."]
     else:
         cmd = [*build_cmd, "--network", "host", "-t", tag, "."]
     
